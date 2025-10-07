@@ -10,7 +10,7 @@ type DNSAnswer struct {
 }
 
 
-func (q *DNSAnswer) Bytes() []byte {
+func (a *DNSAnswer) Bytes() []byte {
 	buf := make([]byte, 0, len(a.Question.DomainName)+10+len(a.Data))
 	buf = append(buf, a.Question.Bytes()...)
 	l := len(buf)
