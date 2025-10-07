@@ -1,6 +1,7 @@
 package main
 //Jlrine2
 import "strings"
+import "encoding/binary"
 
 type QuestionType uint16
 
