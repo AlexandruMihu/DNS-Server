@@ -1,5 +1,7 @@
 package main
 
+import "encoding/binary"
+
 type DNSHeader struct {
 	ID      uint16
 	Flags   uint16
@@ -72,4 +74,19 @@ func (r *DNSHeader) AddNSCOUNT(b uint16) *DNSHeader {
 func (r *DNSHeader) AddARCOUNT(b uint16) *DNSHeader {
 	r.ARCount = b
 	return r
+}
+
+func ParseHeader(buf []byte) *DNSHeader {
+	if len(buf) < 12 {
+		return nil 
+	}
+
+	return &DNSHeader{
+		ID:      binary.BigEndian.Uint16(buf[0:2]),
+		Flags:   binary.BigEndian.Uint16(buf[2:4]),
+		QDCount: binary.BigEndian.Uint16(buf[4:6]),
+		ANCount: binary.BigEndian.Uint16(buf[6:8]),
+		NSCount: binary.BigEndian.Uint16(buf[8:10]),
+		ARCount: binary.BigEndian.Uint16(buf[10:12]),
+	}
 }

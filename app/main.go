@@ -34,18 +34,26 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 	
+        reqHeader := ParseHeader(buf[:size])
+        
+		respCode := ResponseCodeNoError
+		if reqHeader.Opcode != OpcodeQuery {
+			respCode = ResponseCodeNotImplemented
+		}
+
 		var response DNSResponse
 
 		header := &response.Header
 
-		header.AddID(1234)
-		header.AddQR(1)
-		header.AddOPCODE(0)
-		header.AddAA(0)
-		header.AddTC(0)
+		header.AddID(reqHeader.PacketID)
+		header.AddQR(QueryTypeReply)
+		header.AddOPCODE(reqHeader.Opcode)
+		header.AddAA(false)
+		header.AddTC(false)
+		header.AddRD(reqHeader.RecursionDesired)
 		header.AddRA(0)
-		header.AddZ(0)
-		header.AddRCODE(0)
+		header.AddZ(false)
+		header.AddRCODE(respCode)
 		header.AddQDCOUNT(1)
 		header.AddANCOUNT(1)
 		header.AddNSCOUNT(0)
