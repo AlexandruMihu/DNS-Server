@@ -41,6 +41,12 @@ func main() {
 			respCode = ResponseCodeNotImplemented
 		}
 
+		parsedQuestion, _, err := ParseQuestion(receivedData, 12)
+		if err != nil {
+			fmt.Println("Failed to parse question:", err)
+			continue
+		}
+
 		var response DNSResponse
 
 		header := &response.Header
@@ -53,16 +59,16 @@ func main() {
 		header.AddRD(reqHeader.RecursionDesired())
 		header.AddZ(boolToByte(false))
 		header.AddRCODE(respCode)
-		header.AddQDCOUNT(1)
+		header.AddQDCOUNT(reqHeader.QDCount)
 		header.AddANCOUNT(1)
 		header.AddNSCOUNT(0)
 		header.AddARCOUNT(0)
 
 		question := &response.Question
-
-		question.AddName("codecrafters.io")
-		question.AddType(QuestionTypeA)
-		question.AddClass(QuestionClassIN)
+		
+		question.AddName(parsedQuestion.DomainName)
+		question.AddType(parsedQuestion.Type)
+		question.AddClass(parsedQuestion.Class)
 
 		ip, err := ipToBytes("127.0.0.1")
 		if err != nil {

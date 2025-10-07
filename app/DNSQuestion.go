@@ -64,3 +64,41 @@ func (q *DNSQuestion) Bytes() []byte {
 func (q *DNSQuestion ) AddName(name string)  { q.DomainName = name }
 func (q *DNSQuestion ) AddType(t QuestionType) { q.Type = t }
 func (q *DNSQuestion ) AddClass(c QuestionClass) { q.Class = c }
+
+func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
+	if offset >= len(buf) {
+		return nil, offset, errors.New("buffer too small for question")
+	}
+
+	labels := make([]string, 0)
+	for {
+		if offset >= len(buf) {
+			return nil, offset, errors.New("unexpected end of buffer while reading name")
+		}
+		length := int(buf[offset])
+		offset++
+		if length == 0 {
+			break // end of name
+		}
+		if offset+length > len(buf) {
+			return nil, offset, errors.New("label length goes past buffer")
+		}
+		labels = append(labels, string(buf[offset:offset+length]))
+		offset += length
+	}
+	domain := strings.Join(labels, ".")
+	
+	if offset+4 > len(buf) {
+		return nil, offset, errors.New("buffer too small for type/class")
+	}
+	typ := binary.BigEndian.Uint16(buf[offset : offset+2])
+	class := binary.BigEndian.Uint16(buf[offset+2 : offset+4])
+	offset += 4
+
+	q := &DNSQuestion{
+		DomainName: domain,
+		Type:       QuestionType(typ),
+		Class:      QuestionClass(class),
+	}
+	return q, offset, nil
+}
