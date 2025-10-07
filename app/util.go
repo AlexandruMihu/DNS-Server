@@ -21,12 +21,12 @@ const (
 
 // DNS Response codes
 const (
-	ResponseCodeNoError        = 0
-	ResponseCodeFormatError    = 1
-	ResponseCodeServerFailure  = 2
-	ResponseCodeNameError      = 3
-	ResponseCodeNotImplemented = 4
-	ResponseCodeRefused        = 5
+	ResponseCodeNoError        byte = 0
+	ResponseCodeFormatError    byte = 1
+	ResponseCodeServerFailure  byte = 2
+	ResponseCodeNameError      byte = 3
+	ResponseCodeNotImplemented byte = 4
+	ResponseCodeRefused        byte = 5
 )
 
 // DNS Query / Response type
