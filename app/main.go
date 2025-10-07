@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+    "encoding/binary"
 )
 // Ensures gofmt doesn't remove the "net" import in stage 1 (feel free to remove this!)
 var _ = net.ListenUDP
