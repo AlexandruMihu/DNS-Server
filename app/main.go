@@ -68,7 +68,7 @@ func main() {
 		answer.AddQuestion(question)
 		answer.AddTTL(60)
 		answer.AddDataLength(4)
-		answer.AddIP(ip)
+		answer.AddData(ip)
 
 		_, err = udpConn.WriteToUDP(response.Bytes(), source)
 		if err != nil {

@@ -22,8 +22,8 @@ func (r *DNSResponse) Bytes() []byte {
 
     answerBytes := r.Answer.Bytes()
 
-	buf := append(header, questionBytes..)
-	buf := append(buf, answerBytes..)
+	buf := append(header, questionBytes)
+	buf := append(buf, answerBytes)
 	buf := append(buf, r.Body)
 
 	return buf
