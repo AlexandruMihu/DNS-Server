@@ -31,16 +31,23 @@ type DNSQuestion  struct {
 }
 
 func encodeDomainName(domainName string) []byte {
+	
+	domainName = strings.TrimSuffix(domainName, ".")
+
 	parts := strings.Split(domainName, ".")
-	l := len([]byte(domainName)) + 2
-	encoded := make([]byte, 0, l)
+	encoded := make([]byte, 0, len(domainName)+2)
+
 	for _, part := range parts {
-		encodedPart := append([]byte{byte(len(part))}, []byte(part)...)
-		encoded = append(encoded, encodedPart...)
+		if part == "" {
+			continue
+		}
+		encoded = append(encoded, byte(len(part)))
+		encoded = append(encoded, []byte(part)...)
 	}
-	encoded = append(encoded, byte(0))
+	encoded = append(encoded, 0) 
 	return encoded
 }
+
 
 func (q *DNSQuestion) Bytes() []byte {
 	name := encodeDomainName(q.DomainName)
