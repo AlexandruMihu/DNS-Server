@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 	"net"
+	"encoding/binary"
 )
-
+// Akashisang
 // Ensures gofmt doesn't remove the "net" import in stage 1 (feel free to remove this!)
 var _ = net.ListenUDP
 
@@ -35,10 +36,23 @@ func main() {
 		receivedData := string(buf[:size])
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 	
-		// Create an empty response
-		response := []byte{}
-	
-		_, err = udpConn.WriteToUDP(response, source)
+		var response DNSResponse
+		header := &response.Header
+
+		header.AddID(1234)
+		header.AddQR(1)
+		header.AddOPCODE(0)
+		header.AddAA(0)
+		header.AddTC(0)
+		header.AddRA(0)
+		header.AddZ(0)
+		header.AddRCODE(0)
+		header.AddQDCOUNT(0)
+		header.AddANCOUNT(0)
+		header.AddNSCOUNT(0)
+		header.AddARCOUNT(0)
+		
+		_, err = udpConn.WriteToUDP(response.Bytes(), source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
