@@ -22,7 +22,7 @@ func (r *DNSHeader) AddQR(b byte) *DNSHeader {
 }
 
 func (r *DNSHeader) AddOPCODE(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 14
+	r.Flags |= uint16(b&0x0F) << 11
 	return r
 }
 
@@ -91,9 +91,6 @@ func ParseHeader(buf []byte) *DNSHeader {
 	}
 }
 
-func (r *DNSHeader) Opcode() byte {
-	return byte((r.Flags >> 11) & 0xF)
-}
 
 func (r *DNSHeader) RecursionDesired() byte {
 	return byte((r.Flags >> 8) & 1)
