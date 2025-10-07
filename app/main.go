@@ -45,12 +45,12 @@ func main() {
 
 		header := &response.Header
 
-		header.AddID(reqHeader.PacketID)
+		header.AddID(reqHeader.ID)
 		header.AddQR(QueryTypeReply)
-		header.AddOPCODE(reqHeader.Opcode)
+		header.AddOPCODE(reqHeader.Opcode())
 		header.AddAA(false)
 		header.AddTC(false)
-		header.AddRD(reqHeader.RecursionDesired)
+		header.AddRD(reqHeader.RecursionDesired())
 		header.AddRA(0)
 		header.AddZ(false)
 		header.AddRCODE(respCode)

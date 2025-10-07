@@ -90,3 +90,11 @@ func ParseHeader(buf []byte) *DNSHeader {
 		ARCount: binary.BigEndian.Uint16(buf[10:12]),
 	}
 }
+
+func (r *DNSHeader) Opcode() byte {
+	return byte((r.Flags >> 11) & 0xF)
+}
+
+func (r *DNSHeader) RecursionDesired() byte {
+	return byte((r.Flags >> 8) & 1)
+}
