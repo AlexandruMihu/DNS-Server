@@ -37,7 +37,7 @@ func main() {
         reqHeader := ParseHeader(buf[:size])
         
 		respCode := ResponseCodeNoError
-		if reqHeader.Opcode != OpcodeQuery {
+		if reqHeader.Opcode() != OpcodeQuery {
 			respCode = ResponseCodeNotImplemented
 		}
 
@@ -48,10 +48,10 @@ func main() {
 		header.AddID(reqHeader.ID)
 		header.AddQR(QueryTypeReply)
 		header.AddOPCODE(reqHeader.Opcode())
-		header.AddAA(false)
-		header.AddTC(false)
+		header.AddAA(boolToByte(false))
+		header.AddTC(boolToByte(false))
 		header.AddRD(reqHeader.RecursionDesired())
-		header.AddRA(0)
+		header.AddZ(boolToByte(false)))
 		header.AddZ(false)
 		header.AddRCODE(respCode)
 		header.AddQDCOUNT(1)
