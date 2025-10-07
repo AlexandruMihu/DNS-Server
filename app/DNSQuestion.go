@@ -66,43 +66,82 @@ func (q *DNSQuestion ) AddName(name string)  { q.DomainName = name }
 func (q *DNSQuestion ) AddType(t QuestionType) { q.Type = t }
 func (q *DNSQuestion ) AddClass(c QuestionClass) { q.Class = c }
 
-// ParseQuestion parses a DNS question from buf starting at offset.
-// Returns the parsed DNSQuestion, the offset right after the question, and error (if any).
-func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
+func ParseName(buf []byte, offset int) (string, int, error) {
 	if offset >= len(buf) {
-		return nil, offset, errors.New("buffer too small for question")
+		return "", offset, errors.New("offset beyond buffer")
 	}
 
-	// Parse label sequence into domain name
-	labels := make([]string, 0)
+	var labels []string
+	jumped := false
+	origOffset := offset
+	// safety to avoid infinite loops
+	steps := 0
 	for {
+		steps++
+		if steps > len(buf)+5 {
+			return "", offset, errors.New("too many steps while parsing name (possible loop)")
+		}
 		if offset >= len(buf) {
-			return nil, offset, errors.New("unexpected end of buffer while reading name")
+			return "", offset, errors.New("unexpected end of buffer while reading name")
 		}
-		length := int(buf[offset])
+		b := buf[offset]
+
+		// pointer?
+		if b&0xC0 == 0xC0 {
+			if offset+1 >= len(buf) {
+				return "", offset, errors.New("pointer truncated")
+			}
+			pointer := int(binary.BigEndian.Uint16(buf[offset:offset+2]) & 0x3FFF)
+			if pointer >= len(buf) {
+				return "", offset, errors.New("pointer out of range")
+			}
+			// advance original parsing offset by 2 bytes if this is the first jump
+			if !jumped {
+				origOffset = offset + 2
+			}
+			offset = pointer
+			jumped = true
+			continue
+		}
+
+		// zero-length label => end of name
+		if b == 0 {
+			offset++
+			break
+		}
+
+		// normal label
+		length := int(b)
 		offset++
-		if length == 0 {
-			break // end of name
-		}
 		if offset+length > len(buf) {
-			return nil, offset, errors.New("label length goes past buffer")
+			return "", offset, errors.New("label length extends past buffer")
 		}
 		labels = append(labels, string(buf[offset:offset+length]))
 		offset += length
 	}
-	domain := strings.Join(labels, ".")
-	// Next should be 2 bytes type and 2 bytes class
-	if offset+4 > len(buf) {
-		return nil, offset, errors.New("buffer too small for type/class")
+
+	if jumped {
+		return strings.Join(labels, "."), origOffset, nil
 	}
-	typ := binary.BigEndian.Uint16(buf[offset : offset+2])
-	class := binary.BigEndian.Uint16(buf[offset+2 : offset+4])
-	offset += 4
+	return strings.Join(labels, "."), offset, nil
+}
+
+func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
+	name, off, err := ParseName(buf, offset)
+	if err != nil {
+		return nil, offset, err
+	}
+	if off+4 > len(buf) {
+		return nil, off, errors.New("buffer too small for type/class")
+	}
+	typ := binary.BigEndian.Uint16(buf[off : off+2])
+	class := binary.BigEndian.Uint16(buf[off+2 : off+4])
+	off += 4
 
 	q := &DNSQuestion{
-		DomainName: domain,
+		DomainName: name,
 		Type:       QuestionType(typ),
 		Class:      QuestionClass(class),
 	}
-	return q, offset, nil
+	return q, off, nil
 }

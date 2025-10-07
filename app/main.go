@@ -45,50 +45,72 @@ func main() {
 			respCode = ResponseCodeNotImplemented
 		}
 
-		// Parse the question section from the request (offset 12)
-		parsedQuestion, _, err := ParseQuestion(receivedData, 12)
-		if err != nil {
-			fmt.Println("Failed to parse question:", err)
+		qCount := int(reqHeader.QDCount)
+		offset := 12
+		questions := make([]*DNSQuestion, 0, qCount)
+		for i := 0; i < qCount; i++ {
+			q, nextOff, perr := ParseQuestion(receivedData, offset)
+			if perr != nil {
+				fmt.Println("Failed to parse question:", perr)
+				break
+			}
+			questions = append(questions, q)
+			offset = nextOff
+		}
+		// if we didn't parse as many as advertised, treat as error
+		if len(questions) != qCount {
+			fmt.Println("Did not parse expected number of questions")
 			continue
 		}
 
-		var response DNSResponse
+		var respHeader DNSHeader
+		h := &respHeader
+		h.AddID(reqHeader.ID)
+		h.AddQR(QueryTypeReply)
+		h.AddOPCODE(reqHeader.Opcode())
+		h.AddAA(boolToByte(false))
+		h.AddTC(boolToByte(false))
+		h.AddRD(reqHeader.RecursionDesired())
+		h.AddRA(0)
+		h.AddZ(boolToByte(false))
+		h.AddRCODE(respCode)
 
-		header := &response.Header
+		// Mirror the number of questions and provide one answer per question
+		h.AddQDCOUNT(reqHeader.QDCount)
+		h.AddANCOUNT(uint16(len(questions)))
+		h.AddNSCOUNT(0)
+		h.AddARCOUNT(0)
 
-		header.AddID(reqHeader.ID)
-		header.AddQR(QueryTypeReply)
-		header.AddOPCODE(reqHeader.Opcode())
-		header.AddAA(boolToByte(false))
-		header.AddTC(boolToByte(false))
-		header.AddRD(reqHeader.RecursionDesired())
-		header.AddZ(boolToByte(false))
-		header.AddRCODE(respCode)
-		header.AddQDCOUNT(reqHeader.QDCount)
-		header.AddANCOUNT(1)
-		header.AddNSCOUNT(0)
-		header.AddARCOUNT(0)
+		// Header bytes
+		headerBytes := make([]byte, 12)
+		binary.BigEndian.PutUint16(headerBytes[0:2], h.ID)
+		binary.BigEndian.PutUint16(headerBytes[2:4], h.Flags)
+		binary.BigEndian.PutUint16(headerBytes[4:6], h.QDCount)
+		binary.BigEndian.PutUint16(headerBytes[6:8], h.ANCount)
+		binary.BigEndian.PutUint16(headerBytes[8:10], h.NSCount)
+		binary.BigEndian.PutUint16(headerBytes[10:12], h.ARCount)
 
-		question := &response.Question
-		
-		question.AddName(parsedQuestion.DomainName)
-		question.AddType(parsedQuestion.Type)
-		question.AddClass(parsedQuestion.Class)
+		out := make([]byte, 0, 512)
+		out = append(out, headerBytes...)
 
-		ip, err := ipToBytes("127.0.0.1")
-		if err != nil {
-			fmt.Println("Failed to convert IP to bytes:", err)
-			continue
+		// Append each question (uncompressed)
+		for _, q := range questions {
+			out = append(out, q.Bytes()...)
 		}
-        
-		answer:=&response.Answer
 
-		answer.AddQuestion(question)
-		answer.AddTTL(60)
-		answer.AddDataLength(4)
-		answer.AddData(ip)
+		// Prepare answers: one A-record per question (A, IN, TTL=60, RDLEN=4, RDATA=127.0.0.1)
+		ip, _ := ipToBytes("127.0.0.1")
+		for _, q := range questions {
+			var ans DNSAnswer
+			ans.AddQuestion(q)
+			ans.AddTTL(60)
+			ans.AddDataLength(4)
+			ans.AddData(ip)
+			out = append(out, ans.Bytes()...)
+		}
 
-		_, err = udpConn.WriteToUDP(response.Bytes(), source)
+		// Send the response
+		_, err = udpConn.WriteToUDP(out, source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
 		}
