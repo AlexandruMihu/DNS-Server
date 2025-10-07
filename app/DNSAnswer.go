@@ -1,6 +1,5 @@
 package main
 
-import "strings"
 import "encoding/binary"
 
 type DNSAnswer struct {

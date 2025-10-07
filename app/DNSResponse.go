@@ -5,6 +5,7 @@ import "encoding/binary"
 type DNSResponse struct {
 	Header DNSHeader
 	Question DNSQuestion
+	Answer DNSAnswer
 	Body   []byte
 }
 
