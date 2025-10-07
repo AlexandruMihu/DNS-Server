@@ -52,7 +52,7 @@ func main() {
 		header.AddNSCOUNT(0)
 		header.AddARCOUNT(0)
 
-		question :=response.Question
+		question := &response.Question
 
 		question.AddName("codecrafters.io")
 		question.AddType(QuestionTypeA)
