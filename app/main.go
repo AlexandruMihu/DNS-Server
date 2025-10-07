@@ -36,7 +36,7 @@ func main() {
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 	
 		var response DNSResponse
-		
+
 		header := &response.Header
 
 		header.AddID(1234)
@@ -51,7 +51,7 @@ func main() {
 		header.AddANCOUNT(0)
 		header.AddNSCOUNT(0)
 		header.AddARCOUNT(0)
-		
+
 		_, err = udpConn.WriteToUDP(response.Bytes(), source)
 		if err != nil {
 			fmt.Println("Failed to send response:", err)
