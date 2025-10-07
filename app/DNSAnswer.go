@@ -21,7 +21,7 @@ func (a *DNSAnswer) Bytes() []byte {
 	return buf
 }
 
-func (a *DNSAnswer ) AddQuestion(question DNSQuestion)  { a.Question = question }
+func (a *DNSAnswer ) AddQuestion(question *DNSQuestion)  { a.Question = *question }
 func (a *DNSAnswer ) AddTTL(ttl uint32) { a.TimeToLive = ttl }
 func (a *DNSAnswer ) AddDataLength(dataLength uint16) { a.DataLength = dataLength }
 func (a *DNSAnswer ) AddData(data []byte) { a.Data = data }

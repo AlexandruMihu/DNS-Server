@@ -65,7 +65,7 @@ func main() {
         
 		answer:=&response.Answer
 
-		answer.AddQuestion(question)
+		answer.AddQuestion(*question)
 		answer.AddTTL(60)
 		answer.AddDataLength(4)
 		answer.AddData(ip)
