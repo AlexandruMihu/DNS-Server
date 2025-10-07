@@ -40,6 +40,18 @@ func main() {
 			continue
 		}
 
+		respCode := ResponseCodeNoError
+		if reqHeader.Opcode() != OpcodeQuery {
+			respCode = ResponseCodeNotImplemented
+		}
+
+		// Parse the question section from the request (offset 12)
+		parsedQuestion, _, err := ParseQuestion(receivedData, 12)
+		if err != nil {
+			fmt.Println("Failed to parse question:", err)
+			continue
+		}
+
 		var response DNSResponse
 
 		header := &response.Header
