@@ -91,6 +91,9 @@ func ParseHeader(buf []byte) *DNSHeader {
 	}
 }
 
+func (r *DNSHeader) Opcode() byte {
+	return byte((r.Flags >> 11) & 0xF)
+}
 
 func (r *DNSHeader) RecursionDesired() byte {
 	return byte((r.Flags >> 8) & 1)
