@@ -2,6 +2,7 @@ package main
 //Jlrine2
 import "strings"
 import "encoding/binary"
+import "errors"
 
 type QuestionType uint16
 
@@ -65,11 +66,14 @@ func (q *DNSQuestion ) AddName(name string)  { q.DomainName = name }
 func (q *DNSQuestion ) AddType(t QuestionType) { q.Type = t }
 func (q *DNSQuestion ) AddClass(c QuestionClass) { q.Class = c }
 
+// ParseQuestion parses a DNS question from buf starting at offset.
+// Returns the parsed DNSQuestion, the offset right after the question, and error (if any).
 func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
 	if offset >= len(buf) {
 		return nil, offset, errors.New("buffer too small for question")
 	}
 
+	// Parse label sequence into domain name
 	labels := make([]string, 0)
 	for {
 		if offset >= len(buf) {
@@ -87,7 +91,7 @@ func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
 		offset += length
 	}
 	domain := strings.Join(labels, ".")
-	
+	// Next should be 2 bytes type and 2 bytes class
 	if offset+4 > len(buf) {
 		return nil, offset, errors.New("buffer too small for type/class")
 	}

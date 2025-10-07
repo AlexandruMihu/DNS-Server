@@ -30,20 +30,13 @@ func main() {
 			fmt.Println("Error receiving data:", err)
 			break
 		}
-	
-		receivedData := string(buf[:size])
-		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
-	
-        reqHeader := ParseHeader(buf[:size])
-        
-		respCode := ResponseCodeNoError
-		if reqHeader.Opcode() != OpcodeQuery {
-			respCode = ResponseCodeNotImplemented
-		}
 
-		parsedQuestion, _, err := ParseQuestion(receivedData, 12)
-		if err != nil {
-			fmt.Println("Failed to parse question:", err)
+		receivedData := buf[:size] // <-- keep as []byte, not string
+		fmt.Printf("Received %d bytes from %s\n", size, source)
+
+		reqHeader := ParseHeader(receivedData)
+		if reqHeader == nil {
+			fmt.Println("Failed to parse header (packet too small)")
 			continue
 		}
 
