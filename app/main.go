@@ -51,7 +51,7 @@ func main() {
 		header.AddAA(boolToByte(false))
 		header.AddTC(boolToByte(false))
 		header.AddRD(reqHeader.RecursionDesired())
-		header.AddZ(boolToByte(false)))
+		header.AddZ(boolToByte(false))
 		header.AddZ(false)
 		header.AddRCODE(respCode)
 		header.AddQDCOUNT(1)
