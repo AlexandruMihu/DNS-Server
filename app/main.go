@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"encoding/binary"
 )
 // Akashisang
 // Ensures gofmt doesn't remove the "net" import in stage 1 (feel free to remove this!)
@@ -37,6 +36,7 @@ func main() {
 		fmt.Printf("Received %d bytes from %s: %s\n", size, source, receivedData)
 	
 		var response DNSResponse
+		
 		header := &response.Header
 
 		header.AddID(1234)
