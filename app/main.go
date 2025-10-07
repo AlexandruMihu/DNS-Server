@@ -47,10 +47,16 @@ func main() {
 		header.AddRA(0)
 		header.AddZ(0)
 		header.AddRCODE(0)
-		header.AddQDCOUNT(0)
+		header.AddQDCOUNT(1)
 		header.AddANCOUNT(0)
 		header.AddNSCOUNT(0)
 		header.AddARCOUNT(0)
+
+		question :=response.Question
+
+		question.AddName("codecrafters.io")
+		question.AddType(QuestionTypeA)
+		question.AddClass(QuestionClassIN)
 
 		_, err = udpConn.WriteToUDP(response.Bytes(), source)
 		if err != nil {
