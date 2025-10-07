@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 )
-// Akashisang
 // Ensures gofmt doesn't remove the "net" import in stage 1 (feel free to remove this!)
 var _ = net.ListenUDP
 
@@ -48,7 +47,7 @@ func main() {
 		header.AddZ(0)
 		header.AddRCODE(0)
 		header.AddQDCOUNT(1)
-		header.AddANCOUNT(0)
+		header.AddANCOUNT(1)
 		header.AddNSCOUNT(0)
 		header.AddARCOUNT(0)
 
@@ -57,6 +56,19 @@ func main() {
 		question.AddName("codecrafters.io")
 		question.AddType(QuestionTypeA)
 		question.AddClass(QuestionClassIN)
+
+		ip, err := ipToBytes("127.0.0.1")
+		if err != nil {
+			fmt.Println("Failed to convert IP to bytes:", err)
+			continue
+		}
+        
+		answer:=&response.Answer
+
+		answer.AddQuestion(question)
+		answer.AddTTL(60)
+		answer.AddDataLength(4)
+		answer.AddIP(ip)
 
 		_, err = udpConn.WriteToUDP(response.Bytes(), source)
 		if err != nil {
