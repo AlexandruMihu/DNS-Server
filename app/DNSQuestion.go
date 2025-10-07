@@ -2,6 +2,8 @@ package main
 //Jlrine2
 import "strings"
 
+type QuestionType uint16
+
 const (
 	QuestionTypeA     QuestionType = 1
 	QuestionTypeNS    QuestionType = 2
@@ -21,7 +23,7 @@ const (
 	QuestionClassIN QuestionClass = 1
 )
 
-type Question struct {
+type DNSQuestion  struct {
 	DomainName string
 	Type       QuestionType
 	Class      QuestionClass
@@ -39,7 +41,7 @@ func encodeDomainName(domainName string) []byte {
 	return encoded
 }
 
-func (q *Question) Bytes() []byte {
+func (q *DNSQuestion) Bytes() []byte {
 	name := encodeDomainName(q.DomainName)
 	buf := make([]byte, 0, len(name)+4)
 	buf = append(buf, name...)
@@ -51,6 +53,6 @@ func (q *Question) Bytes() []byte {
 	return buf
 }
 
-func (q *Question) AddName(name string)  { q.DomainName = name }
-func (q *Question) AddType(t QuestionType) { q.Type = t }
-func (q *Question) AddClass(c QuestionClass) { q.Class = c }
+func (q *DNSQuestion ) AddName(name string)  { q.DomainName = name }
+func (q *DNSQuestion ) AddType(t QuestionType) { q.Type = t }
+func (q *DNSQuestion ) AddClass(c QuestionClass) { q.Class = c }
