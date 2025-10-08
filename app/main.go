@@ -11,8 +11,14 @@ import (
 
 var _ = net.ListenUDP
 
-func main() {
+// forwardResp holds the upstream response header and the raw answer bytes.
+type forwardResp struct {
+	header      *DNSHeader
+	answerBytes []byte
+	anCount     uint16
+}
 
+func main() {
 	resolver := flag.String("resolver", "", "upstream resolver address (ip:port)")
 	flag.Parse()
 	if *resolver == "" {
@@ -20,260 +26,253 @@ func main() {
 		return
 	}
 
-	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:2053")
-	if err != nil {
-		fmt.Println("Failed to resolve UDP address:", err)
-		return
-	}
-	
-	udpConn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		fmt.Println("Failed to bind to address:", err)
-		return
-	}
-	defer udpConn.Close()
-	
-	rand.Seed(time.Now().UnixNano())
-
-	buf := make([]byte, 4096)
-	
-	fmt.Println("DNS forwarder listening on 127.0.0.1:2053, forwarding to", *resolver)
-
-	for {
-		size, source, err := udpConn.ReadFromUDP(buf)
-		if err != nil {
-			fmt.Println("Error receiving data:", err)
-			continue
-		}
-		receivedData := make([]byte, size)
-		copy(receivedData, buf[:size])
-		go handlePacket(receivedData, source, udpConn, *resolver)
+	if err := runServer("127.0.0.1:2053", *resolver); err != nil {
+		fmt.Println("server error:", err)
 	}
 }
 
-func handlePacket(pkt []byte, source *net.UDPAddr, listenConn *net.UDPConn, resolverAddr string) {
+// runServer binds to listenAddr and forwards queries to resolverAddr.
+func runServer(listenAddr, resolverAddr string) error {
+	udpAddr, err := net.ResolveUDPAddr("udp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("resolve listen addr: %w", err)
+	}
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return fmt.Errorf("bind listen addr: %w", err)
+	}
+	defer udpConn.Close()
+
+	rand.Seed(time.Now().UnixNano())
+	buf := make([]byte, 4096)
+
+	fmt.Println("DNS forwarder listening on", listenAddr, "forwarding to", resolverAddr)
+
+	for {
+		n, src, err := udpConn.ReadFromUDP(buf)
+		if err != nil {
+			fmt.Println("read error:", err)
+			continue
+		}
+		// copy packet for goroutine safety
+		pkt := make([]byte, n)
+		copy(pkt, buf[:n])
+
+		go handleRequest(pkt, src, udpConn, resolverAddr)
+	}
+}
+
+// handleRequest orchestrates parsing, forwarding and responding.
+func handleRequest(pkt []byte, src *net.UDPAddr, udpConn *net.UDPConn, resolverAddr string) {
 	reqHeader := ParseHeader(pkt)
 	if reqHeader == nil {
 		fmt.Println("Failed to parse header (packet too small)")
 		return
 	}
 
-	qCount := int(reqHeader.QDCount)
+	questions, err := parseQuestionsFromPacket(pkt, int(reqHeader.QDCount))
+	if err != nil {
+		fmt.Println("Failed to parse questions:", err)
+		return
+	}
+
+	// Forward each question, collect forwardResponses
+	forwardResponses := make([]forwardResp, 0, len(questions))
+	var firstRespHeader *DNSHeader
+	success := true
+
+	for _, q := range questions {
+		fr, err := forwardQuestion(q, reqHeader, resolverAddr)
+		if err != nil {
+			fmt.Println("forward error:", err)
+			success = false
+			break
+		}
+		forwardResponses = append(forwardResponses, fr)
+		if firstRespHeader == nil {
+			firstRespHeader = fr.header
+		}
+	}
+
+	// If forwarding failed or we collected no answers — return SERVFAIL with original questions
+	if !success || len(forwardResponses) == 0 {
+		if err := sendSERVFAIL(udpConn, src, reqHeader, questions); err != nil {
+			fmt.Println("failed to send SERVFAIL:", err)
+		}
+		return
+	}
+
+	// Build a merged reply and send it
+	out := buildMergedResponse(reqHeader, questions, forwardResponses, firstRespHeader)
+	if _, err := udpConn.WriteToUDP(out, src); err != nil {
+		fmt.Println("Failed to send response to client:", err)
+	}
+}
+
+// parseQuestionsFromPacket parses qCount questions starting at offset 12.
+func parseQuestionsFromPacket(pkt []byte, qCount int) ([]*DNSQuestion, error) {
 	offset := 12
 	questions := make([]*DNSQuestion, 0, qCount)
 	for i := 0; i < qCount; i++ {
-		q, nextOff, perr := ParseQuestion(pkt, offset)
-		if perr != nil {
-			fmt.Println("Failed to parse question:", perr)
-			return
+		q, nextOff, err := ParseQuestion(pkt, offset)
+		if err != nil {
+			return nil, err
 		}
 		questions = append(questions, q)
 		offset = nextOff
 	}
-	if len(questions) != qCount {
-		fmt.Println("Did not parse expected number of questions")
-		return
+	return questions, nil
+}
+
+// forwardQuestion sends a single-question DNS request to resolver and returns the upstream answer section bytes.
+func forwardQuestion(q *DNSQuestion, origHeader *DNSHeader, resolverAddr string) (forwardResp, error) {
+	// Build forward header (one-question query)
+	fwdHeader := DNSHeader{}
+	fwdHeader.AddID(uint16(rand.Intn(0x10000)))
+	fwdHeader.Flags = 0
+	fwdHeader.AddQR(QueryTypeQuery)
+	fwdHeader.AddOPCODE(origHeader.Opcode())
+	fwdHeader.AddRD(origHeader.RecursionDesired())
+	fwdHeader.AddQDCOUNT(1)
+	fwdHeader.AddANCOUNT(0)
+	fwdHeader.AddNSCOUNT(0)
+	fwdHeader.AddARCOUNT(0)
+
+	headerBytes := headerToBytes(&fwdHeader)
+	out := append(headerBytes, q.Bytes()...)
+
+	raddr, err := net.ResolveUDPAddr("udp", resolverAddr)
+	if err != nil {
+		return forwardResp{}, fmt.Errorf("resolve resolver addr: %w", err)
 	}
 
-	// We will forward each question separately to resolver (resolver expects 1 question),
-	// then collect answer sections and merge them back into a single response to the client.
+	conn, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		return forwardResp{}, fmt.Errorf("dial resolver: %w", err)
+	}
+	defer conn.Close()
 
-	type forwardResp struct {
-		header     *DNSHeader
-		answerBytes []byte
-		anCount    uint16
+	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write(out); err != nil {
+		return forwardResp{}, fmt.Errorf("write to resolver: %w", err)
 	}
 
-	forwardResponses := make([]forwardResp, 0, len(questions))
-	var firstRespHeader *DNSHeader
-    
-	success := true
-	
-	// perform per-question forwards
-	for _, q := range questions {
-		fwdID := uint16(rand.Intn(0x10000))
-		fwdHeader := DNSHeader{}
-		// Build header: ID=fwdID, QR=0 (query), OPCODE same as original, RD same as original
-		fwdHeader.AddID(fwdID)
-		fwdHeader.Flags = 0
-		fwdHeader.AddQR(QueryTypeQuery) // QR = 0
-		fwdHeader.AddOPCODE(reqHeader.Opcode())
-		fwdHeader.AddRD(reqHeader.RecursionDesired())
-		fwdHeader.AddQDCOUNT(1)
-		fwdHeader.AddANCOUNT(0)
-		fwdHeader.AddNSCOUNT(0)
-		fwdHeader.AddARCOUNT(0)
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	respBuf := make([]byte, 4096)
+	n, err := conn.Read(respBuf)
+	if err != nil {
+		return forwardResp{}, fmt.Errorf("read from resolver: %w", err)
+	}
+	resp := respBuf[:n]
 
-		// assemble packet
-		headerBytes := make([]byte, 12)
-		binary.BigEndian.PutUint16(headerBytes[0:2], fwdHeader.ID)
-		binary.BigEndian.PutUint16(headerBytes[2:4], fwdHeader.Flags)
-		binary.BigEndian.PutUint16(headerBytes[4:6], fwdHeader.QDCount)
-		binary.BigEndian.PutUint16(headerBytes[6:8], fwdHeader.ANCount)
-		binary.BigEndian.PutUint16(headerBytes[8:10], fwdHeader.NSCount)
-		binary.BigEndian.PutUint16(headerBytes[10:12], fwdHeader.ARCount)
-
-		out := make([]byte, 0, 512)
-		out = append(out, headerBytes...)
-		out = append(out, q.Bytes()...)
-
-		// send to resolver
-		raddr, err := net.ResolveUDPAddr("udp", resolverAddr)
-		if err != nil {
-			fmt.Println("Failed to resolve resolver address:", err)
-			return
-		}
-		conn, err := net.DialUDP("udp", nil, raddr)
-		if err != nil {
-			fmt.Println("Failed to dial resolver:", err)
-			return
-		}
-
-		conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		_, err = conn.Write(out)
-		if err != nil {
-			fmt.Println("Failed to send to resolver:", err)
-			conn.Close()
-			return
-		}
-
-		conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		respBuf := make([]byte, 4096)
-		n, err := conn.Read(respBuf)
-		conn.Close()
-		if err != nil {
-			fmt.Println("Timeout/failed waiting for resolver response:", err)
-			return
-		}
-		resp := respBuf[:n]
-
-		respHeader := ParseHeader(resp)
-		if respHeader == nil {
-			fmt.Println("Resolver sent truncated/invalid header")
-			success = false
-			break
-		}
-
-		// Advance past all questions in the resolver response (respHeader.QDCount)
-		// so we know where the answer section begins.
-		off := 12
-		var perr error
-		for i := 0; i < int(respHeader.QDCount); i++ {
-			_, off, perr = ParseQuestion(resp, off)
-			if perr != nil {
-				fmt.Println("Failed to parse question in resolver response:", perr)
-				success = false
-				break
-			}
-		}
-		if !success {
-			break
-		}
-
-		if off > len(resp) {
-			fmt.Println("Resolver response malformed (answers start beyond length)")
-			success = false
-			break
-		}
-
-		// copy answer section bytes (everything after the question section)
-		answerBytes := make([]byte, len(resp)-off)
-		copy(answerBytes, resp[off:])
-
-		forwardResponses = append(forwardResponses, forwardResp{
-			header:      respHeader,
-			answerBytes: answerBytes,
-			anCount:     respHeader.ANCount,
-		})
-		if firstRespHeader == nil {
-			firstRespHeader = respHeader
-		}
-
+	respHeader := ParseHeader(resp)
+	if respHeader == nil {
+		return forwardResp{}, fmt.Errorf("invalid resolver response header")
 	}
 
-	if !success || len(forwardResponses) == 0 {
-		mergedHeader := DNSHeader{}
-		mergedHeader.ID = reqHeader.ID
-		mergedHeader.Flags = 0
-		mergedHeader.AddQR(QueryTypeReply)
-		mergedHeader.AddOPCODE(reqHeader.Opcode())
-		mergedHeader.AddRD(reqHeader.RecursionDesired())
-		mergedHeader.AddRA(0)
-		mergedHeader.AddRCODE(ResponseCodeServerFailure)
-		mergedHeader.AddQDCOUNT(uint16(len(questions)))
-		mergedHeader.AddANCOUNT(0)
-		mergedHeader.AddNSCOUNT(0)
-		mergedHeader.AddARCOUNT(0)
-		headerBytes := make([]byte, 12)
-		binary.BigEndian.PutUint16(headerBytes[0:2], mergedHeader.ID)
-		binary.BigEndian.PutUint16(headerBytes[2:4], mergedHeader.Flags)
-		binary.BigEndian.PutUint16(headerBytes[4:6], mergedHeader.QDCount)
-		binary.BigEndian.PutUint16(headerBytes[6:8], mergedHeader.ANCount)
-		binary.BigEndian.PutUint16(headerBytes[8:10], mergedHeader.NSCount)
-		binary.BigEndian.PutUint16(headerBytes[10:12], mergedHeader.ARCount)
-		out := make([]byte, 0, 512)
-		out = append(out, headerBytes...)
-		for _, q := range questions {
-			out = append(out, q.Bytes()...)
+	// Advance past ALL questions in the resolver response (respHeader.QDCount)
+	off := 12
+	for i := 0; i < int(respHeader.QDCount); i++ {
+		_, newOff, err := ParseQuestion(resp, off)
+		if err != nil {
+			return forwardResp{}, fmt.Errorf("parsing resolver question: %w", err)
 		}
-		_, _ = listenConn.WriteToUDP(out, source)
-		return
+		off = newOff
 	}
-	
-	mergedHeader := DNSHeader{}
-	mergedHeader.ID = reqHeader.ID // preserve original ID (very important)
-	mergedHeader.Flags = 0
-	mergedHeader.AddQR(QueryTypeReply)         // QR = 1
-	mergedHeader.AddOPCODE(reqHeader.Opcode()) // OPCODE
-	mergedHeader.AddAA(0)
-	mergedHeader.AddTC(0)
-	mergedHeader.AddRD(reqHeader.RecursionDesired())
-	if firstRespHeader != nil {
-		// RA from resolver
-		ra := byte((firstRespHeader.Flags >> 7) & 1)
-		mergedHeader.AddRA(ra)
-		// RCODE from resolver (low 4 bits)
-		rcode := byte(firstRespHeader.Flags & 0x0F)
-		mergedHeader.AddRCODE(rcode)
+
+	if off > len(resp) {
+		return forwardResp{}, fmt.Errorf("resolver response malformed (answers start beyond length)")
+	}
+
+	// Everything after 'off' is the answer/authority/additional sections as raw bytes.
+	answerBytes := make([]byte, len(resp)-off)
+	copy(answerBytes, resp[off:])
+
+	return forwardResp{
+		header:      respHeader,
+		answerBytes: answerBytes,
+		anCount:     respHeader.ANCount,
+	}, nil
+}
+
+// buildMergedResponse constructs the final DNS response sent to the original client.
+// It preserves the original request ID and question section, and appends all answers collected.
+func buildMergedResponse(reqHeader *DNSHeader, questions []*DNSQuestion, frs []forwardResp, firstResp *DNSHeader) []byte {
+	merged := DNSHeader{}
+	merged.ID = reqHeader.ID // preserve original ID
+	merged.Flags = 0
+	merged.AddQR(QueryTypeReply)
+	merged.AddOPCODE(reqHeader.Opcode())
+	merged.AddAA(0)
+	merged.AddTC(0)
+	merged.AddRD(reqHeader.RecursionDesired())
+
+	if firstResp != nil {
+		ra := byte((firstResp.Flags >> 7) & 1)
+		merged.AddRA(ra)
+		rcode := byte(firstResp.Flags & 0x0F)
+		merged.AddRCODE(rcode)
 	} else {
-		mergedHeader.AddRA(0)
-		mergedHeader.AddRCODE(ResponseCodeServerFailure)
+		merged.AddRA(0)
+		merged.AddRCODE(ResponseCodeServerFailure)
 	}
 
-	mergedHeader.AddZ(0)
-	mergedHeader.AddQDCOUNT(uint16(len(questions)))
+	merged.AddZ(0)
+	merged.AddQDCOUNT(uint16(len(questions)))
 
-	// append all answers bytes and sum ANCOUNT
+	// collect answers and sum ANCOUNT
 	totalAnswers := uint16(0)
 	answersOut := make([]byte, 0)
-	for _, fr := range forwardResponses {
+	for _, fr := range frs {
 		totalAnswers += fr.anCount
 		answersOut = append(answersOut, fr.answerBytes...)
 	}
-	mergedHeader.AddANCOUNT(totalAnswers)
-	mergedHeader.AddNSCOUNT(0)
-	mergedHeader.AddARCOUNT(0)
+	merged.AddANCOUNT(totalAnswers)
+	merged.AddNSCOUNT(0)
+	merged.AddARCOUNT(0)
 
-	// create header bytes
-	headerBytes := make([]byte, 12)
-	binary.BigEndian.PutUint16(headerBytes[0:2], mergedHeader.ID)
-	binary.BigEndian.PutUint16(headerBytes[2:4], mergedHeader.Flags)
-	binary.BigEndian.PutUint16(headerBytes[4:6], mergedHeader.QDCount)
-	binary.BigEndian.PutUint16(headerBytes[6:8], mergedHeader.ANCount)
-	binary.BigEndian.PutUint16(headerBytes[8:10], mergedHeader.NSCount)
-	binary.BigEndian.PutUint16(headerBytes[10:12], mergedHeader.ARCount)
-
+	// assemble final bytes
 	out := make([]byte, 0, 512)
-	out = append(out, headerBytes...)
-	// append original questions (so pointers in answers referencing offset 12 remain valid)
+	out = append(out, headerToBytes(&merged)...)
 	for _, q := range questions {
 		out = append(out, q.Bytes()...)
 	}
-	// append answers collected
 	out = append(out, answersOut...)
+	return out
+}
 
-	_, err := listenConn.WriteToUDP(out, source)
-	if err != nil {
-		fmt.Println("Failed to send response to client:", err)
+// sendSERVFAIL constructs a minimal SERVFAIL reply with the original questions and sends it.
+func sendSERVFAIL(udpConn *net.UDPConn, dst *net.UDPAddr, reqHeader *DNSHeader, questions []*DNSQuestion) error {
+	h := DNSHeader{}
+	h.ID = reqHeader.ID
+	h.Flags = 0
+	h.AddQR(QueryTypeReply)
+	h.AddOPCODE(reqHeader.Opcode())
+	h.AddRD(reqHeader.RecursionDesired())
+	h.AddRA(0)
+	h.AddRCODE(ResponseCodeServerFailure)
+	h.AddQDCOUNT(uint16(len(questions)))
+	h.AddANCOUNT(0)
+	h.AddNSCOUNT(0)
+	h.AddARCOUNT(0)
+
+	out := make([]byte, 0, 512)
+	out = append(out, headerToBytes(&h)...)
+	for _, q := range questions {
+		out = append(out, q.Bytes()...)
 	}
+	_, err := udpConn.WriteToUDP(out, dst)
+	return err
+}
+
+// headerToBytes serializes the DNSHeader into 12 bytes.
+func headerToBytes(h *DNSHeader) []byte {
+	b := make([]byte, 12)
+	binary.BigEndian.PutUint16(b[0:2], h.ID)
+	binary.BigEndian.PutUint16(b[2:4], h.Flags)
+	binary.BigEndian.PutUint16(b[4:6], h.QDCount)
+	binary.BigEndian.PutUint16(b[6:8], h.ANCount)
+	binary.BigEndian.PutUint16(b[8:10], h.NSCount)
+	binary.BigEndian.PutUint16(b[10:12], h.ARCount)
+	return b
 }
