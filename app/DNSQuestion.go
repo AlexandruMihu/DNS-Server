@@ -1,5 +1,5 @@
 package main
-//Jlrine2
+
 import "strings"
 import "encoding/binary"
 import "errors"
@@ -9,11 +9,11 @@ type QuestionType uint16
 const (
 	QuestionTypeA     QuestionType = 1
 	QuestionTypeNS    QuestionType = 2
-	QuestionTypeMD    QuestionType = 3 // Obsolete Use MX RFC 1035
-	QuestionTypeMF    QuestionType = 4 // Obsolete Use MX RFC 1035
+	QuestionTypeMD    QuestionType = 3 
+	QuestionTypeMF    QuestionType = 4 
 	QuestionTypeCNAME QuestionType = 5
 	QuestionTypeSOA   QuestionType = 6
-	QuestionTypeWKS   QuestionType = 11 // Experimental RFC 1035
+	QuestionTypeWKS   QuestionType = 11
 	QuestionTypePTR   QuestionType = 12
 	QuestionTypeMX    QuestionType = 15
 	QuestionTypeTXT   QuestionType = 16
@@ -74,7 +74,6 @@ func ParseName(buf []byte, offset int) (string, int, error) {
 	var labels []string
 	jumped := false
 	origOffset := offset
-	// safety to avoid infinite loops
 	steps := 0
 	for {
 		steps++
@@ -86,7 +85,6 @@ func ParseName(buf []byte, offset int) (string, int, error) {
 		}
 		b := buf[offset]
 
-		// pointer?
 		if b&0xC0 == 0xC0 {
 			if offset+1 >= len(buf) {
 				return "", offset, errors.New("pointer truncated")
@@ -95,7 +93,6 @@ func ParseName(buf []byte, offset int) (string, int, error) {
 			if pointer >= len(buf) {
 				return "", offset, errors.New("pointer out of range")
 			}
-			// advance original parsing offset by 2 bytes if this is the first jump
 			if !jumped {
 				origOffset = offset + 2
 			}
@@ -104,13 +101,11 @@ func ParseName(buf []byte, offset int) (string, int, error) {
 			continue
 		}
 
-		// zero-length label => end of name
 		if b == 0 {
 			offset++
 			break
 		}
 
-		// normal label
 		length := int(b)
 		offset++
 		if offset+length > len(buf) {

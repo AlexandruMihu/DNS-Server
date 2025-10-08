@@ -17,42 +17,65 @@ func (r *DNSHeader) AddID(id uint16) *DNSHeader {
 }
 
 func (r *DNSHeader) AddQR(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 15
+    if b == 0 {
+		r.Flags &^= (1 << 15)
+	} else {
+		r.Flags |= uint16(b) << 15
+	}
 	return r
 }
 
 func (r *DNSHeader) AddOPCODE(b byte) *DNSHeader {
+	r.Flags &^= uint16(0x0F) << 11
 	r.Flags |= uint16(b&0x0F) << 11
 	return r
 }
 
 func (r *DNSHeader) AddAA(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 10
+	if b == 0 {
+		r.Flags &^= uint16(1) << 10
+	} else {
+		r.Flags |= uint16(b) << 10
+	}
 	return r
 }
 
 func (r *DNSHeader) AddTC(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 9
+	if b == 0 {
+		r.Flags &^= uint16(1) << 9
+	} else {
+		r.Flags |= uint16(b) << 9
+	}
 	return r
 }
 
 func (r *DNSHeader) AddRD(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 8
+	if b == 0 {
+		r.Flags &^= uint16(1) << 8
+	} else {
+		r.Flags |= uint16(b) << 8
+	}
 	return r
 }
 
 func (r *DNSHeader) AddRA(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 7
+	if b == 0 {
+		r.Flags &^= uint16(1) << 7
+	} else {
+		r.Flags |= uint16(b) << 7
+	}
 	return r
 }
 
 func (r *DNSHeader) AddZ(b byte) *DNSHeader {
-	r.Flags |= uint16(b) << 4
+    r.Flags &^= uint16(0x7) << 4
+	r.Flags |= uint16(b&0x7) << 4
 	return r
 }
 
 func (r *DNSHeader) AddRCODE(b byte) *DNSHeader {
-	r.Flags |= uint16(b)
+	r.Flags &^= uint16(0x0F)
+	r.Flags |= uint16(b & 0x0F)
 	return r
 }
 

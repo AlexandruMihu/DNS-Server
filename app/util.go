@@ -14,12 +14,11 @@ func boolToByte(b bool) byte {
 }
 
 const (
-	OpcodeQuery  = 0 // Standard query
-	OpcodeIQuery = 1 // Inverse query
-	OpcodeStatus = 2 // Server status request
+	OpcodeQuery  = 0
+	OpcodeIQuery = 1 
+	OpcodeStatus = 2 
 )
 
-// DNS Response codes
 const (
 	ResponseCodeNoError        byte = 0
 	ResponseCodeFormatError    byte = 1
@@ -29,7 +28,6 @@ const (
 	ResponseCodeRefused        byte = 5
 )
 
-// DNS Query / Response type
 const (
 	QueryTypeQuery = 0
 	QueryTypeReply = 1
