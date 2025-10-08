@@ -1,5 +1,7 @@
 package main
 
+import "net"
+
 func runServer(listenAddr, resolverAddr string) error {
 	udpAddr, err := net.ResolveUDPAddr("udp", listenAddr)
 	if err != nil {

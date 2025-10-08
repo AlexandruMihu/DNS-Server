@@ -1,8 +1,13 @@
 package main
 
-import "strings"
-import "encoding/binary"
-import "errors"
+import (
+	"encoding/binary"
+	"flag"
+	"fmt"
+	"math/rand"
+	"net"
+	"time"
+)
 
 type QuestionType uint16
 
