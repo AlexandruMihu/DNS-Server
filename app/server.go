@@ -1,6 +1,13 @@
 package main
 
-import "net"
+import (
+	"encoding/binary"
+	"flag"
+	"fmt"
+	"math/rand"
+	"net"
+	"time"
+)
 
 func runServer(listenAddr, resolverAddr string) error {
 	udpAddr, err := net.ResolveUDPAddr("udp", listenAddr)
