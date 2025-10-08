@@ -2,14 +2,6 @@ package main
 
 import "encoding/binary"
 
-type DNSAnswer struct {
-	Question   DNSQuestion
-	TimeToLive uint32
-	DataLength uint16
-	Data       []byte
-}
-
-
 func (a *DNSAnswer) Bytes() []byte {
 	buf := make([]byte, 0, len(a.Question.DomainName)+10+len(a.Data))
 	buf = append(buf, a.Question.Bytes()...)

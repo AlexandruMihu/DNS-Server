@@ -10,33 +10,6 @@ import (
 	"errors"
 )
 
-type QuestionType uint16
-
-const (
-	QuestionTypeA     QuestionType = 1
-	QuestionTypeNS    QuestionType = 2
-	QuestionTypeMD    QuestionType = 3 
-	QuestionTypeMF    QuestionType = 4 
-	QuestionTypeCNAME QuestionType = 5
-	QuestionTypeSOA   QuestionType = 6
-	QuestionTypeWKS   QuestionType = 11
-	QuestionTypePTR   QuestionType = 12
-	QuestionTypeMX    QuestionType = 15
-	QuestionTypeTXT   QuestionType = 16
-)
-
-type QuestionClass uint16
-
-const (
-	QuestionClassIN QuestionClass = 1
-)
-
-type DNSQuestion  struct {
-	DomainName string
-	Type       QuestionType
-	Class      QuestionClass
-}
-
 func encodeDomainName(domainName string) []byte {
 	
 	domainName = strings.TrimSuffix(domainName, ".")

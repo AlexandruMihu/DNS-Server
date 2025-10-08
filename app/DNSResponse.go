@@ -1,11 +1,5 @@
 package main
 
-type forwardResp struct {
-	header      *DNSHeader
-	answerBytes []byte
-	anCount     uint16
-}
-
 func buildMergedResponse(reqHeader *DNSHeader, questions []*DNSQuestion, frs []forwardResp, firstResp *DNSHeader) []byte {
 	merged := DNSHeader{}
 	merged.ID = reqHeader.ID 

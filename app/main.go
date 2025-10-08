@@ -8,7 +8,6 @@ import (
 
 var _ = net.ListenUDP
 
-
 func main() {
 	resolver := flag.String("resolver", "", "upstream resolver address (ip:port)")
 	flag.Parse()
@@ -21,5 +20,3 @@ func main() {
 		fmt.Println("server error:", err)
 	}
 }
-
-

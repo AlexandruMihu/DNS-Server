@@ -2,15 +2,6 @@ package main
 
 import "encoding/binary"
 
-type DNSHeader struct {
-	ID      uint16
-	Flags   uint16
-	QDCount uint16
-	ANCount uint16
-	NSCount uint16
-	ARCount uint16
-}
-
 func (r *DNSHeader) AddID(id uint16) *DNSHeader {
 	r.ID = id
 	return r
