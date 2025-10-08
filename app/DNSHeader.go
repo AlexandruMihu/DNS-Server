@@ -121,3 +121,14 @@ func (r *DNSHeader) Opcode() byte {
 func (r *DNSHeader) RecursionDesired() byte {
 	return byte((r.Flags >> 8) & 1)
 }
+
+func headerToBytes(h *DNSHeader) []byte {
+	b := make([]byte, 12)
+	binary.BigEndian.PutUint16(b[0:2], h.ID)
+	binary.BigEndian.PutUint16(b[2:4], h.Flags)
+	binary.BigEndian.PutUint16(b[4:6], h.QDCount)
+	binary.BigEndian.PutUint16(b[6:8], h.ANCount)
+	binary.BigEndian.PutUint16(b[8:10], h.NSCount)
+	binary.BigEndian.PutUint16(b[10:12], h.ARCount)
+	return b
+}

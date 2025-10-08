@@ -121,6 +121,20 @@ func ParseName(buf []byte, offset int) (string, int, error) {
 	return strings.Join(labels, "."), offset, nil
 }
 
+func parseQuestionsFromPacket(pkt []byte, qCount int) ([]*DNSQuestion, error) {
+	offset := 12
+	questions := make([]*DNSQuestion, 0, qCount)
+	for i := 0; i < qCount; i++ {
+		q, nextOff, err := ParseQuestion(pkt, offset)
+		if err != nil {
+			return nil, err
+		}
+		questions = append(questions, q)
+		offset = nextOff
+	}
+	return questions, nil
+}
+
 func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
 	name, off, err := ParseName(buf, offset)
 	if err != nil {
@@ -139,4 +153,71 @@ func ParseQuestion(buf []byte, offset int) (*DNSQuestion, int, error) {
 		Class:      QuestionClass(class),
 	}
 	return q, off, nil
+}
+
+func forwardQuestion(q *DNSQuestion, origHeader *DNSHeader, resolverAddr string) (forwardResp, error) {
+	fwdHeader := DNSHeader{}
+	fwdHeader.AddID(uint16(rand.Intn(0x10000)))
+	fwdHeader.Flags = 0
+	fwdHeader.AddQR(QueryTypeQuery)
+	fwdHeader.AddOPCODE(origHeader.Opcode())
+	fwdHeader.AddRD(origHeader.RecursionDesired())
+	fwdHeader.AddQDCOUNT(1)
+	fwdHeader.AddANCOUNT(0)
+	fwdHeader.AddNSCOUNT(0)
+	fwdHeader.AddARCOUNT(0)
+
+	headerBytes := headerToBytes(&fwdHeader)
+	out := append(headerBytes, q.Bytes()...)
+
+	raddr, err := net.ResolveUDPAddr("udp", resolverAddr)
+	if err != nil {
+		return forwardResp{}, fmt.Errorf("resolve resolver addr: %w", err)
+	}
+
+	conn, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		return forwardResp{}, fmt.Errorf("dial resolver: %w", err)
+	}
+	defer conn.Close()
+
+	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+	if _, err := conn.Write(out); err != nil {
+		return forwardResp{}, fmt.Errorf("write to resolver: %w", err)
+	}
+
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	respBuf := make([]byte, 4096)
+	n, err := conn.Read(respBuf)
+	if err != nil {
+		return forwardResp{}, fmt.Errorf("read from resolver: %w", err)
+	}
+	resp := respBuf[:n]
+
+	respHeader := ParseHeader(resp)
+	if respHeader == nil {
+		return forwardResp{}, fmt.Errorf("invalid resolver response header")
+	}
+
+	off := 12
+	for i := 0; i < int(respHeader.QDCount); i++ {
+		_, newOff, err := ParseQuestion(resp, off)
+		if err != nil {
+			return forwardResp{}, fmt.Errorf("parsing resolver question: %w", err)
+		}
+		off = newOff
+	}
+
+	if off > len(resp) {
+		return forwardResp{}, fmt.Errorf("resolver response malformed (answers start beyond length)")
+	}
+
+	answerBytes := make([]byte, len(resp)-off)
+	copy(answerBytes, resp[off:])
+
+	return forwardResp{
+		header:      respHeader,
+		answerBytes: answerBytes,
+		anCount:     respHeader.ANCount,
+	}, nil
 }

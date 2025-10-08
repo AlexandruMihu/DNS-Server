@@ -2,29 +2,50 @@ package main
 
 import "encoding/binary"
 
-type DNSResponse struct {
-	Header DNSHeader
-	Question DNSQuestion
-	Answer DNSAnswer
-	Body   []byte
+type forwardResp struct {
+	header      *DNSHeader
+	answerBytes []byte
+	anCount     uint16
 }
 
-func (r *DNSResponse) Bytes() []byte {
-	header := make([]byte, 12)
-	binary.BigEndian.PutUint16(header[0:2], r.Header.ID)
-	binary.BigEndian.PutUint16(header[2:4], r.Header.Flags)
-	binary.BigEndian.PutUint16(header[4:6], r.Header.QDCount)
-	binary.BigEndian.PutUint16(header[6:8], r.Header.ANCount)
-	binary.BigEndian.PutUint16(header[8:10], r.Header.NSCount)
-	binary.BigEndian.PutUint16(header[10:12], r.Header.ARCount)
+func buildMergedResponse(reqHeader *DNSHeader, questions []*DNSQuestion, frs []forwardResp, firstResp *DNSHeader) []byte {
+	merged := DNSHeader{}
+	merged.ID = reqHeader.ID 
+	merged.Flags = 0
+	merged.AddQR(QueryTypeReply)
+	merged.AddOPCODE(reqHeader.Opcode())
+	merged.AddAA(0)
+	merged.AddTC(0)
+	merged.AddRD(reqHeader.RecursionDesired())
 
-	questionBytes := r.Question.Bytes()
+	if firstResp != nil {
+		ra := byte((firstResp.Flags >> 7) & 1)
+		merged.AddRA(ra)
+		rcode := byte(firstResp.Flags & 0x0F)
+		merged.AddRCODE(rcode)
+	} else {
+		merged.AddRA(0)
+		merged.AddRCODE(ResponseCodeServerFailure)
+	}
 
-    answerBytes := r.Answer.Bytes()
+	merged.AddZ(0)
+	merged.AddQDCOUNT(uint16(len(questions)))
 
-	buf := append(header, questionBytes...)
-	buf = append(buf, answerBytes...)
-	buf = append(buf, r.Body...)
+	totalAnswers := uint16(0)
+	answersOut := make([]byte, 0)
+	for _, fr := range frs {
+		totalAnswers += fr.anCount
+		answersOut = append(answersOut, fr.answerBytes...)
+	}
+	merged.AddANCOUNT(totalAnswers)
+	merged.AddNSCOUNT(0)
+	merged.AddARCOUNT(0)
 
-	return buf
+	out := make([]byte, 0, 512)
+	out = append(out, headerToBytes(&merged)...)
+	for _, q := range questions {
+		out = append(out, q.Bytes()...)
+	}
+	out = append(out, answersOut...)
+	return out
 }
