@@ -1,7 +1,5 @@
 package main
 
-import "encoding/binary"
-
 type forwardResp struct {
 	header      *DNSHeader
 	answerBytes []byte

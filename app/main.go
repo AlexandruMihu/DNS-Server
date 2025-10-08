@@ -1,12 +1,9 @@
 package main
 
 import (
-	"encoding/binary"
 	"flag"
 	"fmt"
-	"math/rand"
 	"net"
-	"time"
 )
 
 var _ = net.ListenUDP
