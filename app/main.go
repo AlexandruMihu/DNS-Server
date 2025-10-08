@@ -86,7 +86,9 @@ func handlePacket(pkt []byte, source *net.UDPAddr, listenConn *net.UDPConn, reso
 
 	forwardResponses := make([]forwardResp, 0, len(questions))
 	var firstRespHeader *DNSHeader
-
+    
+	success := true
+	
 	// perform per-question forwards
 	for _, q := range questions {
 		fwdID := uint16(rand.Intn(0x10000))
@@ -189,6 +191,34 @@ func handlePacket(pkt []byte, source *net.UDPAddr, listenConn *net.UDPConn, reso
 
 	}
 
+	if !success || len(forwardResponses) == 0 {
+		mergedHeader := DNSHeader{}
+		mergedHeader.ID = reqHeader.ID
+		mergedHeader.Flags = 0
+		mergedHeader.AddQR(QueryTypeReply)
+		mergedHeader.AddOPCODE(reqHeader.Opcode())
+		mergedHeader.AddRD(reqHeader.RecursionDesired())
+		mergedHeader.AddRA(0)
+		mergedHeader.AddRCODE(ResponseCodeServerFailure)
+		mergedHeader.AddQDCOUNT(uint16(len(questions)))
+		mergedHeader.AddANCOUNT(0)
+		mergedHeader.AddNSCOUNT(0)
+		mergedHeader.AddARCOUNT(0)
+		headerBytes := make([]byte, 12)
+		binary.BigEndian.PutUint16(headerBytes[0:2], mergedHeader.ID)
+		binary.BigEndian.PutUint16(headerBytes[2:4], mergedHeader.Flags)
+		binary.BigEndian.PutUint16(headerBytes[4:6], mergedHeader.QDCount)
+		binary.BigEndian.PutUint16(headerBytes[6:8], mergedHeader.ANCount)
+		binary.BigEndian.PutUint16(headerBytes[8:10], mergedHeader.NSCount)
+		binary.BigEndian.PutUint16(headerBytes[10:12], mergedHeader.ARCount)
+		out := make([]byte, 0, 512)
+		out = append(out, headerBytes...)
+		for _, q := range questions {
+			out = append(out, q.Bytes()...)
+		}
+		_, _ = listenConn.WriteToUDP(out, source)
+		return
+	}
 	
 	mergedHeader := DNSHeader{}
 	mergedHeader.ID = reqHeader.ID // preserve original ID (very important)
