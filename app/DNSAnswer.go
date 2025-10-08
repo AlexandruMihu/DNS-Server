@@ -14,7 +14,7 @@ func (a *DNSAnswer) Bytes() []byte {
 	buf := make([]byte, 0, len(a.Question.DomainName)+10+len(a.Data))
 	buf = append(buf, a.Question.Bytes()...)
 	l := len(buf)
-	buf = append(buf, byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)) // zeroed bytes
+	buf = append(buf, byte(0), byte(0), byte(0), byte(0), byte(0), byte(0))
 	binary.BigEndian.PutUint32(buf[l:], a.TimeToLive)
 	binary.BigEndian.PutUint16(buf[l+4:], a.DataLength)
 	buf = append(buf, a.Data...)

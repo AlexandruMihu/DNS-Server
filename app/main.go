@@ -2,12 +2,10 @@ package main
 
 import (
 	"encoding/binary"
-	"errors"
 	"flag"
 	"fmt"
 	"math/rand"
 	"net"
-	"strings"
 	"time"
 )
 
