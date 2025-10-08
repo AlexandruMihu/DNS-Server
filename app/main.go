@@ -148,47 +148,50 @@ func handlePacket(pkt []byte, source *net.UDPAddr, listenConn *net.UDPConn, reso
 		respHeader := ParseHeader(resp)
 		if respHeader == nil {
 			fmt.Println("Resolver sent truncated/invalid header")
-			return
-		}
-		if respHeader.QDCount != 1 {
-			// unexpected from resolver
-			fmt.Println("Resolver response QDCount != 1, skipping")
-			return
+			success = false
+			break
 		}
 
-		// parse its question to find where answers start
+		// Advance past all questions in the resolver response (respHeader.QDCount)
+		// so we know where the answer section begins.
 		off := 12
-		_, off2, perr := ParseQuestion(resp, off)
-		if perr != nil {
-			fmt.Println("Failed to parse question in resolver response:", perr)
-			return
+		var perr error
+		for i := 0; i < int(respHeader.QDCount); i++ {
+			_, off, perr = ParseQuestion(resp, off)
+			if perr != nil {
+				fmt.Println("Failed to parse question in resolver response:", perr)
+				success = false
+				break
+			}
 		}
-		answersStart := off2
-		if answersStart > len(resp) {
-			fmt.Println("Resolver response malformed (answersStart beyond length)")
-			return
+		if !success {
+			break
 		}
-		answerBytes := make([]byte, len(resp)-answersStart)
-		copy(answerBytes, resp[answersStart:])
+
+		if off > len(resp) {
+			fmt.Println("Resolver response malformed (answers start beyond length)")
+			success = false
+			break
+		}
+
+		// copy answer section bytes (everything after the question section)
+		answerBytes := make([]byte, len(resp)-off)
+		copy(answerBytes, resp[off:])
 
 		forwardResponses = append(forwardResponses, forwardResp{
-			header:     respHeader,
+			header:      respHeader,
 			answerBytes: answerBytes,
-			anCount:    respHeader.ANCount,
+			anCount:     respHeader.ANCount,
 		})
 		if firstRespHeader == nil {
 			firstRespHeader = respHeader
 		}
+
 	}
 
-	// build merged response to original client
+	
 	mergedHeader := DNSHeader{}
 	mergedHeader.ID = reqHeader.ID // preserve original ID (very important)
-	// Construct flags:
-	// - QR = reply
-	// - OPCODE = same as original
-	// - RD = original RD
-	// - RA and RCODE we copy from the resolver response (first resp)
 	mergedHeader.Flags = 0
 	mergedHeader.AddQR(QueryTypeReply)         // QR = 1
 	mergedHeader.AddOPCODE(reqHeader.Opcode()) // OPCODE
