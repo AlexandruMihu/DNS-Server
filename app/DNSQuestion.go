@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"net"
 	"time"
+	"strings"
+	"errors"
 )
 
 type QuestionType uint16
